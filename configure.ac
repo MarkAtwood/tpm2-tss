@@ -147,12 +147,13 @@ AC_ARG_ENABLE([policy],
 AM_CONDITIONAL(POLICY, test "x$enable_policy" = "xyes")
 
 AC_ARG_WITH([crypto],
-            [AS_HELP_STRING([--with-crypto={ossl,mbed,none}],
+            [AS_HELP_STRING([--with-crypto={ossl,mbed,wolfssl,none}],
                             [sets the ESYS crypto backend (default is OpenSSL)])],,
             [with_crypto=ossl])
 
-AM_CONDITIONAL(ESYS_OSSL, test "x$with_crypto" = "xossl")
-AM_CONDITIONAL(ESYS_MBED, test "x$with_crypto" = "xmbed")
+AM_CONDITIONAL(ESYS_OSSL,    test "x$with_crypto" = "xossl")
+AM_CONDITIONAL(ESYS_MBED,    test "x$with_crypto" = "xmbed")
+AM_CONDITIONAL(ESYS_WOLFSSL, test "x$with_crypto" = "xwolfssl")
 
 AC_ARG_ENABLE([vendor],
             [AS_HELP_STRING([--enable-vendor],
@@ -189,6 +190,53 @@ AS_IF([test "x$enable_esys" = xyes],
            AC_DEFINE([MBED], [1], [mbedTLS cryptographic backend])
            TSS2_ESYS_CFLAGS_CRYPTO="$LIBMBED_CFLAGS"
            TSS2_ESYS_LDFLAGS_CRYPTO="-lmbedcrypto"
+       ], [test "x$with_crypto" = xwolfssl], [
+           PKG_CHECK_MODULES([WOLFSSL], [wolfssl],,
+               [AC_MSG_ERROR([wolfSSL not found; install wolfssl or set PKG_CONFIG_PATH])])
+           TSS2_ESYS_CFLAGS_CRYPTO="$WOLFSSL_CFLAGS"
+           TSS2_ESYS_LDFLAGS_CRYPTO="$WOLFSSL_LIBS"
+           dnl Verify this wolfSSL installation was built with the features we require.
+           dnl options.h must appear first to see the per-installation feature flags.
+           old_CPPFLAGS="$CPPFLAGS"
+           CPPFLAGS="$CPPFLAGS $TSS2_ESYS_CFLAGS_CRYPTO"
+           AC_MSG_CHECKING([whether wolfSSL has AES-CFB support])
+           AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[
+#include <wolfssl/options.h>
+#ifndef WOLFSSL_AES_CFB
+# error "wolfSSL built without WOLFSSL_AES_CFB"
+#endif
+]])], [AC_MSG_RESULT([yes])],
+               [AC_MSG_RESULT([no])
+                AC_MSG_ERROR([wolfSSL lacks AES-CFB support; rebuild wolfSSL with --enable-aescfb])])
+           AC_MSG_CHECKING([whether wolfSSL has ECC support])
+           AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[
+#include <wolfssl/options.h>
+#ifndef HAVE_ECC
+# error "wolfSSL built without HAVE_ECC"
+#endif
+]])], [AC_MSG_RESULT([yes])],
+               [AC_MSG_RESULT([no])
+                AC_MSG_ERROR([wolfSSL lacks ECC support; rebuild wolfSSL with --enable-ecc])])
+           AC_MSG_CHECKING([whether wolfSSL has RSA support])
+           AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[
+#include <wolfssl/options.h>
+#ifdef NO_RSA
+# error "wolfSSL built without RSA (--disable-rsa)"
+#endif
+]])], [AC_MSG_RESULT([yes])],
+               [AC_MSG_RESULT([no])
+                AC_MSG_ERROR([wolfSSL lacks RSA support; rebuild wolfSSL without --disable-rsa])])
+           AC_MSG_CHECKING([whether wolfSSL has HMAC support])
+           AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[
+#include <wolfssl/options.h>
+#ifdef NO_HMAC
+# error "wolfSSL built without HMAC (--disable-hmac)"
+#endif
+]])], [AC_MSG_RESULT([yes])],
+               [AC_MSG_RESULT([no])
+                AC_MSG_ERROR([wolfSSL lacks HMAC support; rebuild wolfSSL without --disable-hmac])])
+           CPPFLAGS="$old_CPPFLAGS"
+           AC_DEFINE([WOLFSSL], [1], [wolfSSL cryptographic backend])
        ], [test "x$with_crypto" = xnone], [
            AC_MSG_NOTICE([No crypto backend selected! Users must set crypto functions!])
        ], [AC_MSG_ERROR([Bad value for --with-crypto $with_crypto])])])

@@ -610,6 +610,9 @@ endif
 if ESYS_MBED
 TSS2_ESYS_SRC_CRYPTO = src/tss2-esys/esys_crypto_mbed.h src/tss2-esys/esys_crypto_mbed.c
 endif
+if ESYS_WOLFSSL
+TSS2_ESYS_SRC_CRYPTO = src/tss2-esys/esys_crypto_wolfssl.h src/tss2-esys/esys_crypto_wolfssl.c
+endif
 
 src_tss2_esys_libtss2_esys_la_CFLAGS  = $(AM_CFLAGS) -I$(srcdir)/src/tss2-esys \
     $(TSS2_ESYS_CFLAGS_CRYPTO)

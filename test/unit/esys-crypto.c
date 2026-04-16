@@ -143,15 +143,23 @@ check_hmac_functions(void **state) {
 static void
 check_random(void **state) {
     TSS2_RC     rc;
-    size_t      num_bytes = 0;
     TPM2B_NONCE nonce;
 
     ESYS_CRYPTO_CALLBACKS crypto_cb = { 0 };
     rc = iesys_initialize_crypto_backend(&crypto_cb, NULL);
     assert_int_equal(rc, TSS2_RC_SUCCESS);
 
-    rc = iesys_crypto_get_random2b(&crypto_cb, &nonce, num_bytes);
+    /* Success: num_bytes==0 fills the entire buffer. */
+    rc = iesys_crypto_get_random2b(&crypto_cb, &nonce, 0);
     assert_int_equal(rc, TSS2_RC_SUCCESS);
+
+    /* NULL nonce must be rejected before any RNG access. */
+    rc = iesys_crypto_get_random2b(&crypto_cb, NULL, 0);
+    assert_int_equal(rc, TSS2_ESYS_RC_BAD_REFERENCE);
+
+    /* Requesting more bytes than the TPM2B_NONCE buffer holds must be rejected. */
+    rc = iesys_crypto_get_random2b(&crypto_cb, &nonce, sizeof(nonce.buffer) + 1);
+    assert_int_equal(rc, TSS2_ESYS_RC_BAD_SIZE);
 }
 
 static void

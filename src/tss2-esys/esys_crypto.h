@@ -21,6 +21,8 @@
 #include "esys_crypto_ossl.h"
 #elif defined(MBED)
 #include "esys_crypto_mbed.h"
+#elif defined(WOLFSSL)
+#include "esys_crypto_wolfssl.h"
 #else
 #define iesys_crypto_aes_decrypt_internal    NULL;
 #define iesys_crypto_aes_encrypt_internal    NULL;

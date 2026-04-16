@@ -109,6 +109,54 @@ jobs:
         run: |
           cat $(find ../ -name config.log) || true
           cat $(find ../ -name test-suite.log) || true
+  test-wolfssl:
+    runs-on: ubuntu-latest
+    if: "!contains(github.ref, 'coverity_scan')"
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+            fetch-depth: 0
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q \
+            autoconf autoconf-archive automake libtool pkg-config \
+            gcc make libcmocka-dev
+      - name: Build and install wolfSSL
+        run: |
+          # Pin to a commit SHA rather than a mutable tag to prevent supply
+          # chain issues if the v5.7.6-stable tag is moved.
+          git clone --depth=1 --branch v5.7.6-stable \
+            https://github.com/wolfSSL/wolfssl.git /tmp/wolfssl
+          test "$(git -C /tmp/wolfssl rev-parse HEAD)" \
+            = "239b85c80438bf60d9a5b9e0ebe9ff097a760d0d"
+          cd /tmp/wolfssl
+          ./autogen.sh
+          # --enable-aescfb and --enable-ecc are required by the tpm2-tss wolfssl backend.
+          ./configure --enable-aescfb --enable-ecc --prefix=/usr/local
+          make -j$(nproc)
+          sudo make install
+          sudo ldconfig
+      - name: Bootstrap
+        run: ./bootstrap
+      - name: Configure
+        run: |
+          PKG_CONFIG_PATH=/usr/local/lib/pkgconfig \
+          ./configure \
+            --with-crypto=wolfssl \
+            --disable-fapi \
+            --disable-policy \
+            CC=gcc
+      - name: Build
+        run: make -j$(nproc)
+      - name: Unit tests
+        run: make check TESTS="test/unit/esys-crypto"
+      - name: failure
+        if: ${{ failure() }}
+        run: |
+          cat $(find . -name config.log) || true
+          cat $(find . -name test-suite.log) || true
   test-no-crypto-build:
     runs-on: ubuntu-latest
     if: "!contains(github.ref, 'coverity_scan')"
